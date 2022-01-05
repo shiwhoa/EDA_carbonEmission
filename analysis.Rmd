@@ -1,0 +1,110 @@
+```{r}
+# install.packages('tidyverse')
+# install.packages('lubridate')
+# install.packages('plotly')
+# install.packages('janitor')
+# install.packages('yaml')
+```
+---
+title: "Carbon Emissions"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(lubridate)
+library(plotly)
+library(janitor)
+
+# read in data
+footprint <- read_csv("NFA 2018.csv") %>%
+    clean_names()
+    
+## Data preparation
+per_year_country <- footprint %>%
+    group_by(year, country) %>%
+    summarise(total_carbon = sum(carbon, na.rm = T), total_land=sum(total, na.rm = T), population=max(population), GDP=mean(percapita_gdp_2010_usd), continent=first(un_region)) %>%
+    na.omit()
+
+per_year_continent <- per_year_country %>%
+    group_by(year, continent) %>%
+    summarise(total_carbon = sum(total_carbon, na.rm = T), population = sum(population)) %>%
+    na.omit()
+```
+
+---
+
+In the following graph we can see the Yearly Carbon Emissions per Continent
+
+
+```{r, echo=FALSE}
+(ggplot(per_year_continent %>% filter(continent != 'World'), aes(year, total_carbon)) + geom_area(aes(fill=continent), alpha=0.5) + ylab('Total Carbon Emissions') + ggtitle('Yearly Carbon Emissions per Continent')) %>%
+ggplotly()
+
+
+```
+
+---
+
+The next graph shows Worldwide Yearly Carbon Emissions
+
+
+```{r, echo=FALSE}
+
+plot_ly(per_year_continent %>% filter(continent=='World'), 
+        x = ~year,
+        y = ~total_carbon, 
+        type = 'scatter', 
+        mode = 'line') %>%
+layout(title='World Carbon Emissions per Year', yaxis = list(title=""))
+
+```
+
+---
+
+Let's suppose we would like to see how Carbon Emissions are affected by Total Land and Population of a country.
+The size of the markers in the following graph indicates the value of Carbon Emissions
+
+
+```{r, echo=FALSE}
+
+p <- ggplot(per_year_country %>% filter(continent!='World'), aes(total_land, population)) + geom_point(aes(size=total_carbon, , color=continent), alpha=0.5) + 
+    labs(title='Carbon Emissions related to Total Land and Population', subtitle = '(size of marker indicates value of emissions)')
+ggplotly(p)
+
+```
+
+---
+
+Finally, here is a map of the mean carbon emissions per country
+
+```{r, echo=FALSE}
+
+mean_carbon_per_country <- per_year_country %>%
+    group_by(country) %>%
+    summarize(mean_carbon = mean(total_carbon, na.rm = T))
+
+# specify some map projection/options
+g <- list(
+  scope = 'world',
+  projection = list(type = 'natural earth'),
+  showlakes = TRUE,
+  lakecolor = toRGB('white')
+)
+
+# create our plot
+plot_geo(mean_carbon_per_country, locationmode = 'country names') %>%
+  add_trace(
+    z = ~mean_carbon, 
+    locations = ~country,
+    color = ~mean_carbon,
+    colors = "Reds"   
+  ) %>%
+  layout(
+    title = 'Mean Carbon Emissions per Country',
+    geo = g
+  )
+
+```
